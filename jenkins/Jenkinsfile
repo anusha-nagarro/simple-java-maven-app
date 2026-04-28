@@ -7,10 +7,11 @@ pipeline {
     }
 
     environment {
-        EC2_IP = '51.21.163.184'
+        EC2_IP = 'YOUR_PUBLIC_IP'   // 🔁 Replace with your EC2 public IP
     }
 
     stages {
+
         stage('Build') {
             steps {
                 bat 'mvn -B -DskipTests clean package'
@@ -28,19 +29,56 @@ pipeline {
             }
         }
 
+        stage('Archive Artifact') {
+            steps {
+                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+            }
+        }
+
         stage('Deploy to EC2') {
             steps {
-                withCredentials([sshUserPrivateKey(credentialsId: 'ec2-key', keyFileVariable: 'SSH_KEY')]) {
+                withCredentials([
+                    sshUserPrivateKey(
+                        credentialsId: 'ec2-key',     // 🔁 Must match Jenkins credential ID
+                        keyFileVariable: 'SSH_KEY'
+                    )
+                ]) {
                     bat """
-                    echo Deploying to EC2...
+                    echo ===============================
+                    echo Fixing SSH Key Permissions
+                    echo ===============================
 
-                    scp -o StrictHostKeyChecking=no -i %SSH_KEY% target\\*.jar ec2-user@%EC2_IP%:/home/ec2-user/
+                    icacls "%SSH_KEY%" /inheritance:r
+                    icacls "%SSH_KEY%" /grant:r "%USERNAME%:R"
 
-                    ssh -o StrictHostKeyChecking=no -i %SSH_KEY% ec2-user@%EC2_IP% ^
+                    echo ===============================
+                    echo Copying JAR to EC2
+                    echo ===============================
+
+                    scp -o StrictHostKeyChecking=no -i "%SSH_KEY%" target\\*.jar ec2-user@%EC2_IP%:/home/ec2-user/
+
+                    echo ===============================
+                    echo Deploying Application
+                    echo ===============================
+
+                    ssh -o StrictHostKeyChecking=no -i "%SSH_KEY%" ec2-user@%EC2_IP% ^
                     "pkill -f java; nohup java -jar *.jar > app.log 2>&1 &"
+
+                    echo ===============================
+                    echo Deployment Completed
+                    echo ===============================
                     """
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            echo '✅ Deployment Successful!'
+        }
+        failure {
+            echo '❌ Deployment Failed. Check logs.'
         }
     }
 }
