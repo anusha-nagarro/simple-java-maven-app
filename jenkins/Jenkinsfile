@@ -7,8 +7,7 @@ pipeline {
     }
 
     environment {
-    EC2_HOST = "10.1.0.24"
-    }
+        EC2_HOST = "10.1.0.24"
     }
 
     stages {
@@ -40,7 +39,7 @@ pipeline {
             steps {
                 withCredentials([
                     sshUserPrivateKey(
-                        credentialsId: 'ec2-key',     // 🔁 Must match Jenkins credential ID
+                        credentialsId: 'ec2-key',
                         keyFileVariable: 'SSH_KEY'
                     )
                 ]) {
@@ -56,14 +55,14 @@ pipeline {
                     echo Copying JAR to EC2
                     echo ===============================
 
-                    scp -o StrictHostKeyChecking=no -i "%SSH_KEY%" target\\*.jar ec2-user@%EC2_IP%:/home/ec2-user/
+                    scp -o StrictHostKeyChecking=no -i "%SSH_KEY%" target\\*.jar ec2-user@%EC2_HOST%:/home/ec2-user/app.jar
 
                     echo ===============================
                     echo Deploying Application
                     echo ===============================
 
-                    ssh -o StrictHostKeyChecking=no -i "%SSH_KEY%" ec2-user@%EC2_IP% ^
-                    "pkill -f java; nohup java -jar *.jar > app.log 2>&1 &"
+                    ssh -o StrictHostKeyChecking=no -i "%SSH_KEY%" ec2-user@%EC2_HOST% ^
+                    "pkill -f 'java -jar' || true; nohup java -jar app.jar > app.log 2>&1 &"
 
                     echo ===============================
                     echo Deployment Completed
@@ -76,10 +75,10 @@ pipeline {
 
     post {
         success {
-            echo '✅ Deployment Successful!'
+            echo 'Deployment Successful!'
         }
         failure {
-            echo '❌ Deployment Failed. Check logs.'
+            echo 'Deployment Failed. Check logs.'
         }
     }
 }
