@@ -1,15 +1,22 @@
 pipeline {
     agent any
+
     tools {
         maven 'Maven-3'
         jdk 'JDK-21'
     }
+
+    environment {
+        EC2_IP = '51.21.163.184'
+    }
+
     stages {
         stage('Build') {
             steps {
                 bat 'mvn -B -DskipTests clean package'
             }
         }
+
         stage('Test') {
             steps {
                 bat 'mvn test'
@@ -20,9 +27,19 @@ pipeline {
                 }
             }
         }
-        stage('Deliver') { 
+
+        stage('Deploy to EC2') {
             steps {
-                bat 'jenkins\\scripts\\deliver.bat'
+                withCredentials([sshUserPrivateKey(credentialsId: 'ec2-key', keyFileVariable: 'SSH_KEY')]) {
+                    bat """
+                    echo Deploying to EC2...
+
+                    scp -o StrictHostKeyChecking=no -i %SSH_KEY% target\\*.jar ec2-user@%EC2_IP%:/home/ec2-user/
+
+                    ssh -o StrictHostKeyChecking=no -i %SSH_KEY% ec2-user@%EC2_IP% ^
+                    "pkill -f java; nohup java -jar *.jar > app.log 2>&1 &"
+                    """
+                }
             }
         }
     }
