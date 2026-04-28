@@ -8,6 +8,7 @@ pipeline {
 
     environment {
         EC2_HOST = "51.21.163.184"
+        KEY_PATH = "C:\\Users\\kancharlarani\\keys\\my-app-key.pem"
     }
 
     stages {
@@ -31,46 +32,25 @@ pipeline {
 
         stage('Archive Artifact') {
             steps {
-                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+                archiveArtifacts artifacts: 'target/*.jar'
             }
         }
 
         stage('Deploy to EC2') {
             steps {
-                withCredentials([sshUserPrivateKey(
-                    credentialsId: 'ec2-key',
-                    keyFileVariable: 'KEY_PATH'
-                )]) {
+                bat """
+                echo Copying JAR...
 
-                    bat """
-                    echo ===============================
-                    echo Copying JAR to EC2
-                    echo ===============================
+                scp -o StrictHostKeyChecking=no -i "%KEY_PATH%" target\\*.jar ec2-user@%EC2_HOST%:/home/ec2-user/app.jar
 
-                    scp -o StrictHostKeyChecking=no -i "%KEY_PATH%" target\\*.jar ec2-user@%EC2_HOST%:/home/ec2-user/app.jar
+                echo Deploying...
 
-                    echo ===============================
-                    echo Deploying Application
-                    echo ===============================
+                ssh -o StrictHostKeyChecking=no -i "%KEY_PATH%" ec2-user@%EC2_HOST% ^
+                "pkill -f java || true; nohup java -jar app.jar > app.log 2>&1 &"
 
-                    ssh -o StrictHostKeyChecking=no -i "%KEY_PATH%" ec2-user@%EC2_HOST% ^
-                    "pkill -f 'java -jar' || true; nohup java -jar app.jar > app.log 2>&1 &"
-
-                    echo ===============================
-                    echo Deployment Completed
-                    echo ===============================
-                    """
-                }
+                echo Done
+                """
             }
-        }
-    }
-
-    post {
-        success {
-            echo 'Deployment Successful!'
-        }
-        failure {
-            echo 'Deployment Failed. Check logs.'
         }
     }
 }
